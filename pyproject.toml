@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "imdb-actor-success"
+version = "0.1.0"
+description = "Rank film actors by major roles in well-rated IMDb movies."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "duckdb>=1.4,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+plots = ["matplotlib>=3.9,<4"]
+
+[project.scripts]
+imdb-actor-success = "actor_success.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/actor_success"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+

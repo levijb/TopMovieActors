@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+/demo/
+/demo-run/
+/data/*.tsv.gz
+/data/*.tsv.gz.part
+/results/*.csv
+/results/*.json
+/results/report.md
+/results/.duckdb-temp/
+
