@@ -85,8 +85,11 @@ def _leaderboard_plot(
     ax.scatter(raw, positions, color=INK, s=22, zorder=4)
     ax.set_yticks(positions, [row["name"] for row in leaders])
     ax.set_xlim(0, max(raw) + 12)
+    threshold = config["rating_threshold"]
     ax.set_xlabel(
-        f"Share of eligible movies with a major role and rating ≥ {config['rating_threshold']:.1f} (%)"
+        "Share of eligible movies with a major role (no rating cutoff) (%)"
+        if threshold is None else
+        f"Share of eligible movies with a major role and rating ≥ {threshold:.1f} (%)"
     )
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
@@ -100,7 +103,13 @@ def _leaderboard_plot(
             fontsize=8.7,
             color=INK,
         )
-    ax.set_title("Who combines strong films with substantial roles?", loc="left", pad=38)
+    ax.set_title(
+        "Who most consistently receives major roles?"
+        if threshold is None else
+        "Who combines strong films with substantial roles?",
+        loc="left",
+        pad=38,
+    )
     ax.text(
         0,
         1.015,
@@ -126,6 +135,7 @@ def _sample_size_panel(
     rows: list[dict[str, str]],
     highlighted: list[dict[str, str]],
     short_names: bool = False,
+    label_headroom: float = 13,
 ) -> None:
     from adjustText import adjust_text
 
@@ -150,19 +160,21 @@ def _sample_size_panel(
         label="Labeled actors",
     )
     ax.set_xlim(0, max(int(row["eligible_movies"]) for row in rows) + 20)
-    ax.set_ylim(0, min(105, max(float(row["success_rate_pct"]) for row in rows) + 13))
+    ax.set_ylim(0, max(float(row["success_rate_pct"]) for row in rows) + label_headroom)
     texts = []
     shortened = [_short_actor_label(row["name"]) for row in highlighted]
     shortened_counts = Counter(shortened)
-    for row in highlighted:
+    for label_index, row in enumerate(highlighted):
         candidate = _short_actor_label(row["name"])
         label = candidate if short_names and shortened_counts[candidate] == 1 else row["name"]
         texts.append(
             ax.text(
                 int(row["eligible_movies"]) + 0.7,
-                float(row["success_rate_pct"]) + 0.4,
+                float(row["success_rate_pct"]) + (
+                    (label_index % 5 - 2) * 4.5 if short_names else 0.4
+                ),
                 label,
-                fontsize=9,
+                fontsize=8 if short_names else 9,
                 color=INK,
                 zorder=5,
             )
@@ -200,10 +212,10 @@ def _sample_size_plot(rows: list[dict[str, str]], limit: int, destination: Path)
             fontsize=10,
         )
     else:
-        fig, axes = plt.subplots(3, 1, figsize=(13.5, 15), sharex=True, sharey=True, layout="constrained")
+        fig, axes = plt.subplots(3, 1, figsize=(14, 17.5), sharex=True, sharey=True, layout="constrained")
         boundaries = (0, 9, 17, limit)
         for ax, start, end in zip(axes, boundaries[:-1], boundaries[1:], strict=True):
-            _sample_size_panel(ax, rows, rows[start:end], short_names=True)
+            _sample_size_panel(ax, rows, rows[start:end], short_names=True, label_headroom=27)
             ax.set_title(f"Adjusted ranks {start + 1}–{end}", loc="left", pad=10, color=MUTED)
             ax.set_ylabel("Observed success rate (%)")
         axes[-1].set_xlabel("Eligible movies in principal-cast filmography")
@@ -238,28 +250,38 @@ def _outcome_mix_plot(
         movie_rows = by_actor[row["nconst"]]
         count = len(movie_rows)
         if count == 0:
-            groups.append([0.0, 0.0, 0.0, 0.0])
+            groups.append([0.0] * (2 if config["rating_threshold"] is None else 4))
             continue
-        groups.append(
-            [
-                100 * sum(c["is_major"] == "True" and c["is_high_rated"] == "True" for c in movie_rows) / count,
-                100 * sum(c["is_major"] == "True" and c["is_high_rated"] == "False" for c in movie_rows) / count,
-                100 * sum(c["is_major"] == "False" and c["is_high_rated"] == "True" for c in movie_rows) / count,
-                100 * sum(c["is_major"] == "False" and c["is_high_rated"] == "False" for c in movie_rows) / count,
-            ]
-        )
+        if config["rating_threshold"] is None:
+            groups.append([
+                100 * sum(c["is_major"] == "True" for c in movie_rows) / count,
+                100 * sum(c["is_major"] == "False" for c in movie_rows) / count,
+            ])
+        else:
+            groups.append(
+                [
+                    100 * sum(c["is_major"] == "True" and c["is_high_rated"] == "True" for c in movie_rows) / count,
+                    100 * sum(c["is_major"] == "True" and c["is_high_rated"] == "False" for c in movie_rows) / count,
+                    100 * sum(c["is_major"] == "False" and c["is_high_rated"] == "True" for c in movie_rows) / count,
+                    100 * sum(c["is_major"] == "False" and c["is_high_rated"] == "False" for c in movie_rows) / count,
+                ]
+            )
 
     fig, ax = plt.subplots(figsize=(11, 2.6 + 0.37 * len(top)), layout="constrained")
     positions = list(range(len(labels)))
     left = [0.0] * len(labels)
-    for index, (label, color) in enumerate(
+    threshold = config["rating_threshold"]
+    categories = (
+        [("Major role", TEAL), ("Smaller role", PALE_TEAL)]
+        if threshold is None else
         [
-            (f"Major role · ≥ {config['rating_threshold']:.1f}", TEAL),
-            (f"Major role · < {config['rating_threshold']:.1f}", GOLD),
-            (f"Smaller role · ≥ {config['rating_threshold']:.1f}", PALE_TEAL),
-            (f"Smaller role · < {config['rating_threshold']:.1f}", PALE),
+            (f"Major role · ≥ {threshold:.1f}", TEAL),
+            (f"Major role · < {threshold:.1f}", GOLD),
+            (f"Smaller role · ≥ {threshold:.1f}", PALE_TEAL),
+            (f"Smaller role · < {threshold:.1f}", PALE),
         ]
-    ):
+    )
+    for index, (label, color) in enumerate(categories):
         widths = [group[index] for group in groups]
         ax.barh(positions, widths, left=left, height=0.65, label=label, color=color)
         left = [previous + width for previous, width in zip(left, widths, strict=True)]
@@ -287,12 +309,16 @@ def _sensitivity_data(
     credits: list[dict[str, str]],
     config: dict[str, Any],
     limit: int,
-) -> tuple[tuple[float, ...], list[dict[str, str]], list[list[int]], list[int]]:
+) -> tuple[tuple[float | None, ...], list[dict[str, str]], list[list[int]], list[int]]:
     """Count qualifying movies per actor at each rating cutoff."""
-    baseline = float(config["rating_threshold"])
-    thresholds = tuple(
-        threshold for threshold in (baseline - 0.5, baseline, baseline + 0.5, baseline + 1.0)
-        if 0 <= threshold <= 10
+    baseline = config["rating_threshold"]
+    thresholds = (
+        (None, 6.5, 7.0, 8.0)
+        if baseline is None else
+        tuple(
+            threshold for threshold in (baseline - 0.5, baseline, baseline + 0.5, baseline + 1.0)
+            if 0 <= threshold <= 10
+        )
     )
     by_actor: dict[str, list[dict[str, str]]] = defaultdict(list)
     for credit in credits:
@@ -304,7 +330,7 @@ def _sensitivity_data(
         [
             sum(
                 int(credit["cast_rank"]) <= config["major_cast_size"]
-                and float(credit["rating"]) >= threshold
+                and (threshold is None or float(credit["rating"]) >= threshold)
                 for credit in by_actor[row["nconst"]]
             )
             for threshold in thresholds
@@ -332,7 +358,10 @@ def _sensitivity_plot(
     cmap = colors.LinearSegmentedColormap.from_list("share", [PALE, PALE_TEAL, TEAL])
     fig, ax = plt.subplots(figsize=(10, 2.6 + 0.38 * len(actors)), layout="constrained")
     image = ax.imshow(rates, cmap=cmap, norm=colors.Normalize(vmin=0, vmax=100), aspect="auto")
-    ax.set_xticks(range(len(thresholds)), [f"{threshold:.1f}+" for threshold in thresholds])
+    ax.set_xticks(
+        range(len(thresholds)),
+        ["No cutoff" if threshold is None else f"{threshold:.1f}+" for threshold in thresholds],
+    )
     ax.set_yticks(range(len(actors)), [row["name"] for row in actors])
     ax.tick_params(length=0)
     ax.set_xlabel("IMDb rating threshold")
@@ -341,7 +370,7 @@ def _sensitivity_plot(
         0,
         1.015,
         (
-            f"Top {len(actors)} at the baseline cutoff · each cell is qualifying / eligible films; "
+            f"Top {len(actors)} in this scenario · each cell is qualifying / eligible films; "
             "darker color means a higher share"
         ),
         transform=ax.transAxes,

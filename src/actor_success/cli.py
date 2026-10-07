@@ -9,6 +9,15 @@ from .demo import create_demo_data
 from .download import download_datasets
 
 
+def _rating_threshold(value: str) -> float | None:
+    if value.lower() in {"none", "all"}:
+        return None
+    try:
+        return float(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("expected a score from 0 to 10, or 'none'") from error
+
+
 def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--output-dir", type=Path, default=Path("results"))
@@ -17,7 +26,8 @@ def _analysis_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         help="Optional CSV with nconst and rank columns; bypasses automatic top-N selection.",
     )
-    parser.add_argument("--rating-threshold", type=float, default=7.0)
+    parser.add_argument("--rating-threshold", type=_rating_threshold, default=7.0,
+                        help="Minimum IMDb score (default: 7.0); use 'none' for no score cutoff.")
     parser.add_argument("--min-votes", type=int, default=10_000)
     parser.add_argument("--major-cast-size", type=int, default=3)
     parser.add_argument("--top-n", type=int, default=100)

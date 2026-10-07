@@ -14,6 +14,28 @@ In the October 7, 2026 snapshot, **Emma Watson has the highest observed percenta
 
 These are results for the cohort and filters below. IMDb's ratings and vote counts change, so a new download can change the table.
 
+## Additional rating scenarios
+
+The same 100 actors, 12,622 eligible movies, 10,000-vote floor, and top-three cast rule are used in all three runs. Only the rating requirement changes. That keeps each actor's denominator fixed, so the percentages are directly comparable.
+
+| Rating requirement | Highest observed rate | Evidence-adjusted leader |
+| --- | --- | --- |
+| At least 7.0 | Emma Watson: 12/18 (66.67%) | Leonardo DiCaprio: 21/32 (65.63%; Wilson lower bound 48.31%) |
+| At least 8.0 | Leonardo DiCaprio: 9/32 (28.13%) | Leonardo DiCaprio: 9/32 (28.13%; lower bound 15.56%) |
+| No rating cutoff | Tom Hanks: 61/61 (100%) | Tom Hanks: 61/61 (100%; lower bound 94.08%) |
+
+At **8.0**, the top five by evidence-adjusted score are DiCaprio (9/32), Tom Holland (5/22), Matt Damon (8/54), Harrison Ford (7/46), and Al Pacino (6/41). Emma Watson drops from 12/18 at 7.0 to 1/18 at 8.0: a high share of films at 7.0 does not imply many at 8.0.
+
+![Top 10 actors at the 8.0 IMDb rating cutoff](docs/figures/rating-8/leaderboard-top10.svg)
+
+With **no rating cutoff**, “success” simply means a top-three cast credit; it no longer measures movie rating. Hanks has a top-three position in all 61 of his eligible principal-cast films. Nicolas Cage is second by evidence-adjusted score at 86/90 (95.56%), even though his 7.0 success rate is 16/90 (17.78%). This contrast shows how strongly the rating requirement changes the question, not just the ordering.
+
+![Top 10 actors by major-role share, without a movie-rating cutoff](docs/figures/no-cutoff/leaderboard-top10.svg)
+
+The 8.0 figures are available in [top 10](docs/figures/rating-8/leaderboard-top10.svg) and [top 25](docs/figures/rating-8/leaderboard-top25.svg) leaderboard versions; likewise for [sample size (10)](docs/figures/rating-8/sample-size-top10.svg), [sample size (25)](docs/figures/rating-8/sample-size-top25.svg), [outcome mix (10)](docs/figures/rating-8/outcome-mix-top10.svg), [outcome mix (25)](docs/figures/rating-8/outcome-mix-top25.svg), [rating sensitivity (10)](docs/figures/rating-8/rating-sensitivity-top10.svg), and [rating sensitivity (25)](docs/figures/rating-8/rating-sensitivity-top25.svg).
+
+The no-cutoff run has matching [top 10](docs/figures/no-cutoff/leaderboard-top10.svg) and [top 25](docs/figures/no-cutoff/leaderboard-top25.svg) leaderboards, [sample size (10)](docs/figures/no-cutoff/sample-size-top10.svg) and [(25)](docs/figures/no-cutoff/sample-size-top25.svg), [outcome mix (10)](docs/figures/no-cutoff/outcome-mix-top10.svg) and [(25)](docs/figures/no-cutoff/outcome-mix-top25.svg), and [rating sensitivity (10)](docs/figures/no-cutoff/rating-sensitivity-top10.svg) and [(25)](docs/figures/no-cutoff/rating-sensitivity-top25.svg). Its outcome mix has two segments—major and smaller roles—because every eligible movie qualifies on rating. Its sensitivity view restores the 6.5, 7.0, and 8.0 cutoffs for comparison.
+
 ## See the results
 
 ### The leading actors
@@ -55,14 +77,14 @@ The project downloads four official IMDb files. `title.basics` identifies movies
 1. Keep `titleType = movie`, `isAdult = 0`, and `numVotes ≥ 10,000`. This snapshot has **12,622 eligible movie titles** across the full IMDb dataset.
 2. For each movie, keep principal-credit rows whose category is `actor` or `actress`. Rank those rows by IMDb's `ordering` field. A **major role** is cast rank 1, 2, or 3. This is a billing proxy, not measured screen time or narrative importance.
 3. Build a reproducible cohort: among performers with at least five eligible movies, select the 100 whose eligible principal-cast movie credits have the largest **sum of movie vote counts**. This is an audience-exposure measure. It is not IMDbPro's STARmeter chart.
-4. Mark a credit successful when cast rank is at most 3 **and** the movie's IMDb rating is at least 7.0. Count each eligible movie once per actor.
+4. Mark a credit successful when cast rank is at most 3 **and** the movie's IMDb rating meets the chosen threshold (7.0 by default). With `--rating-threshold none`, only the cast-rank condition remains. Count each eligible movie once per actor.
 5. Compute `success rate = successful movies / all eligible movies for that actor`. The primary ranking uses the **95% Wilson lower confidence bound** for that fraction; `raw_rank` separately ranks the literal percentages.
 
 The Wilson score treats each eligible movie as a success/failure observation. It is a descriptive way to downweight small samples, not a claim that movies are independent random draws. The analysis also reports `major_role_hit_rate_pct` (high-rated major roles divided by all major roles) and `high_rated_major_share_pct` (high-rated major roles divided by all high-rated appearances), which answer different questions.
 
 | Setting | Default | CLI flag |
 | --- | ---: | --- |
-| High-rating threshold | 7.0 | `--rating-threshold` |
+| High-rating threshold | 7.0 (or 8.0 / none for the additional runs) | `--rating-threshold` |
 | Minimum movie votes | 10,000 | `--min-votes` |
 | Major-role cast positions | First 3 | `--major-cast-size` |
 | Cohort size | 100 | `--top-n` |
@@ -81,17 +103,23 @@ imdb-actor-success demo
 imdb-actor-success download --data-dir data
 imdb-actor-success analyze --data-dir data --output-dir results
 imdb-actor-success plots --results-dir results --output-dir docs/figures
+imdb-actor-success analyze --data-dir data --output-dir results/rating-8 --rating-threshold 8.0
+imdb-actor-success plots --results-dir results/rating-8 --output-dir docs/figures/rating-8
+imdb-actor-success analyze --data-dir data --output-dir results/no-cutoff --rating-threshold none
+imdb-actor-success plots --results-dir results/no-cutoff --output-dir docs/figures/no-cutoff
 python -m pytest -q
 ```
 
 On macOS or Linux, activate the environment with `source .venv/bin/activate`. The fictional `demo` takes seconds; the real download is about 1.3 GB compressed and the analysis needs additional temporary disk space.
 
-The local `results/` directory contains:
+Each local results directory (`results/`, `results/rating-8/`, and `results/no-cutoff/`) contains:
 
 - `leaderboard.csv`: all 100 actor-level measures, with raw and adjusted ranks.
 - `movie_credits.csv`: the film-level evidence behind every numerator and denominator.
 - `report.md`: a readable top-20 report.
 - `summary.json`: parameters, winners, generation time, and input-file metadata.
+
+In the no-cutoff CSV, the legacy column names `high_rated_movies` and `major_high_rated_movies` mean all eligible movies and all major-role movies, respectively. The `summary.json` configuration records a `null` rating threshold. All three local results directories are Git-ignored; the aggregate figures and findings above are tracked.
 
 Run a different scenario, for example:
 

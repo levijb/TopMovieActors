@@ -7,8 +7,8 @@ __pycache__/
 /demo-run/
 /data/*.tsv.gz
 /data/*.tsv.gz.part
-/results/*.csv
-/results/*.json
-/results/report.md
-/results/.duckdb-temp/
+/results/**/*.csv
+/results/**/*.json
+/results/**/report.md
+/results/**/.duckdb-temp/
 

@@ -22,7 +22,7 @@ ATTRIBUTION = "Information courtesy of\nIMDb\n(https://www.imdb.com).\nUsed with
 
 @dataclass(frozen=True)
 class AnalysisConfig:
-    rating_threshold: float = 7.0
+    rating_threshold: float | None = 7.0
     min_votes: int = 10_000
     major_cast_size: int = 3
     top_n: int = 100
@@ -76,8 +76,10 @@ def analyze(
         raise FileNotFoundError(f"People CSV not found: {people_csv}")
     if config.top_n < 1 or config.min_movies < 1 or config.major_cast_size < 1:
         raise ValueError("top_n, min_movies, and major_cast_size must be positive")
-    if config.min_votes < 0 or not 0 <= config.rating_threshold <= 10:
-        raise ValueError("min_votes must be non-negative and rating_threshold must be 0-10")
+    if config.min_votes < 0 or (
+        config.rating_threshold is not None and not 0 <= config.rating_threshold <= 10
+    ):
+        raise ValueError("min_votes must be non-negative and rating_threshold must be 0-10 or none")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     temp_dir = output_dir / ".duckdb-temp"
@@ -212,10 +214,10 @@ def analyze(
                     s.nconst,
                     coalesce(any_value(n.primaryName), s.nconst) AS name,
                     count(c.tconst) AS eligible_movies,
-                    count(c.tconst) FILTER (WHERE c.rating >= ?) AS high_rated_movies,
+                    count(c.tconst) FILTER (WHERE c.rating >= coalesce(?, -1)) AS high_rated_movies,
                     count(c.tconst) FILTER (WHERE c.cast_rank <= ?) AS major_roles,
                     count(c.tconst) FILTER (
-                        WHERE c.cast_rank <= ? AND c.rating >= ?
+                        WHERE c.cast_rank <= ? AND c.rating >= coalesce(?, -1)
                     ) AS major_high_rated_movies,
                     round(avg(c.rating), 2) AS average_rating,
                     round(avg(c.rating) FILTER (WHERE c.cast_rank <= ?), 2) AS average_rating_as_major
@@ -321,8 +323,8 @@ def analyze(
                 c.votes,
                 c.cast_rank,
                 c.cast_rank <= ? AS is_major,
-                c.rating >= ? AS is_high_rated,
-                c.cast_rank <= ? AND c.rating >= ? AS is_success
+                c.rating >= coalesce(?, -1) AS is_high_rated,
+                c.cast_rank <= ? AND c.rating >= coalesce(?, -1) AS is_success
             FROM selected_people AS s
             JOIN cast_credits AS c USING (nconst)
             ORDER BY s.source_rank, c.year NULLS LAST, c.title, c.tconst
@@ -344,6 +346,8 @@ def analyze(
             "source": "IMDb non-commercial datasets",
             "cohort_method": cohort_method,
             "metric": (
+                "success_rate_pct = top-billed principal-cast movies / all eligible principal-cast movies"
+                if config.rating_threshold is None else
                 "success_rate_pct = top-billed principal-cast movies rated at or above "
                 "the threshold / all eligible principal-cast movies"
             ),
@@ -424,7 +428,11 @@ def analyze(
                 "",
                 "## Settings",
                 "",
-                f"- Rating threshold: **{config.rating_threshold:.1f}+**",
+                (
+                    "- Rating threshold: **none (all rated eligible movies)**"
+                    if config.rating_threshold is None else
+                    f"- Rating threshold: **{config.rating_threshold:.1f}+**"
+                ),
                 f"- Minimum votes per movie: **{config.min_votes:,}**",
                 f"- Major role proxy: **top {config.major_cast_size} cast positions**",
                 f"- Cohort size: **{len(records)}**",
