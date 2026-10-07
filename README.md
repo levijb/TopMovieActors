@@ -18,27 +18,35 @@ These are results for the cohort and filters below. IMDb's ratings and vote coun
 
 ### The leading actors
 
-The dark portion is each actor's conservative Wilson lower bound. The full bar and dot show the observed percentage; the label gives successful films divided by eligible films.
+The dark portion is each actor's conservative Wilson lower bound. The full bar and dot show the observed percentage; the label gives successful films divided by eligible films. The compact chart includes the top 10 by evidence-adjusted score.
 
-![Top 15 actors, observed success rates and Wilson lower bounds](docs/figures/leaderboard.svg)
+![Top 10 actors, observed success rates and Wilson lower bounds](docs/figures/leaderboard-top10.svg)
+
+[Open the top-25 leaderboard](docs/figures/leaderboard-top25.svg).
 
 ### Percentage versus sample size
 
-Every dot represents one of the 100 actors. Emma Watson has the highest raw rate, while DiCaprio combines a nearly equal rate with more eligible movies. The highlighted four lead the evidence-adjusted ranking.
+Every dot represents one of the 100 actors. Emma Watson has the highest raw rate, while DiCaprio combines a nearly equal rate with more eligible movies. The compact version names and highlights the top 10. The extended version splits the top 25 into three matched panels and uses surnames to keep labels readable; full names appear in the leaderboard. The remaining actors stay visible as faint dots for context.
 
-![Scatterplot of eligible movie count versus observed success rate](docs/figures/sample-size.svg)
+![Top 10 actors labeled on a scatterplot of eligible movie count versus observed success rate](docs/figures/sample-size-top10.svg)
+
+[Open the scatterplot with 25 actors labeled](docs/figures/sample-size-top25.svg).
 
 ### What the percentage contains
 
 A film can land in one of four groups: major or smaller role, crossed with high or lower rating. Only the teal segment contributes to the headline success rate. This makes the denominator and exclusions visible.
 
-![Stacked composition of role size and movie rating for the leading actors](docs/figures/outcome-mix.svg)
+![Stacked composition of role size and movie rating for the top 10 actors](docs/figures/outcome-mix-top10.svg)
+
+[Open the outcome mix for the top 25](docs/figures/outcome-mix-top25.svg).
 
 ### Does the 7.0 threshold change the answer?
 
-The cells show evidence-adjusted rank among all 100 actors if the rating cutoff is moved from 6.5 to 8.0 while the rest of the method stays fixed. Darker cells are higher ranks. The figure uses the same locally generated movie-credit rows as the main analysis.
+**Each cell is a count of qualifying films over eligible films**, with color showing that fraction as a percentage. For example, DiCaprio has **21/32** at 7.0 and **9/32** at 8.0; Michael Caine has **25/60** and **1/60**. The denominator stays fixed because this view changes only the rating cutoff. Rows remain in their original evidence-adjusted order at 7.0, so the numbers in the cells are film counts, never ranks.
 
-![Heatmap of actor rank across rating cutoffs](docs/figures/rating-sensitivity.svg)
+![Qualifying film counts at four rating cutoffs for the top 10 actors](docs/figures/rating-sensitivity-top10.svg)
+
+[Open the rating sensitivity view for the top 25](docs/figures/rating-sensitivity-top25.svg).
 
 ## Method
 

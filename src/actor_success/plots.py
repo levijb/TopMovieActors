@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
-
-from .analysis import _wilson_lower
-
 
 INK = "#162533"
 MUTED = "#586b79"
@@ -67,11 +64,11 @@ def _save_svg(fig, plt, destination: Path) -> None:
 
 
 def _leaderboard_plot(
-    rows: list[dict[str, str]], config: dict[str, Any], destination: Path
+    rows: list[dict[str, str]], config: dict[str, Any], limit: int, destination: Path
 ) -> None:
     plt = _setup_figure()
-    leaders = rows[:15][::-1]
-    fig, ax = plt.subplots(figsize=(11, 8.1), layout="constrained")
+    leaders = rows[:limit][::-1]
+    fig, ax = plt.subplots(figsize=(11.5, 2.7 + 0.39 * len(leaders)), layout="constrained")
     positions = list(range(len(leaders)))
 
     lower = [float(row["wilson_lower_pct"]) for row in leaders]
@@ -87,7 +84,7 @@ def _leaderboard_plot(
     )
     ax.scatter(raw, positions, color=INK, s=22, zorder=4)
     ax.set_yticks(positions, [row["name"] for row in leaders])
-    ax.set_xlim(0, 78)
+    ax.set_xlim(0, max(raw) + 12)
     ax.set_xlabel(
         f"Share of eligible movies with a major role and rating ≥ {config['rating_threshold']:.1f} (%)"
     )
@@ -103,11 +100,11 @@ def _leaderboard_plot(
             fontsize=8.7,
             color=INK,
         )
-    ax.set_title("Who combines strong films with substantial roles?", loc="left", pad=18)
+    ax.set_title("Who combines strong films with substantial roles?", loc="left", pad=38)
     ax.text(
         0,
         1.015,
-        "Top 15 by evidence-adjusted score · dark segment reflects the conservative lower bound",
+        f"Top {len(leaders)} by evidence-adjusted score · dark segment is the conservative lower bound",
         transform=ax.transAxes,
         color=MUTED,
         fontsize=10,
@@ -116,61 +113,108 @@ def _leaderboard_plot(
     _save_svg(fig, plt, destination)
 
 
-def _sample_size_plot(rows: list[dict[str, str]], destination: Path) -> None:
-    plt = _setup_figure()
-    fig, ax = plt.subplots(figsize=(10.5, 6.7), layout="constrained")
-    ordinary = [row for row in rows if int(row["confidence_rank"]) > 4]
-    highlighted = [row for row in rows if int(row["confidence_rank"]) <= 4]
+def _short_actor_label(name: str) -> str:
+    if name.endswith(" Jr."):
+        return " ".join(name.split()[-2:])
+    if " De Niro" in name:
+        return "De Niro"
+    return name.split()[-1]
+
+
+def _sample_size_panel(
+    ax,
+    rows: list[dict[str, str]],
+    highlighted: list[dict[str, str]],
+    short_names: bool = False,
+) -> None:
+    from adjustText import adjust_text
+
     ax.scatter(
-        [int(row["eligible_movies"]) for row in ordinary],
-        [float(row["success_rate_pct"]) for row in ordinary],
-        s=36,
-        color=PALE_TEAL,
-        edgecolors=TEAL,
-        linewidths=0.6,
-        alpha=0.9,
+        [int(row["eligible_movies"]) for row in rows],
+        [float(row["success_rate_pct"]) for row in rows],
+        s=28,
+        color=GRID,
+        edgecolors=MUTED,
+        linewidths=0.35,
+        alpha=0.65,
         label="Other actors",
     )
     ax.scatter(
         [int(row["eligible_movies"]) for row in highlighted],
         [float(row["success_rate_pct"]) for row in highlighted],
-        s=90,
+        s=65,
         color=CORAL,
         edgecolors="white",
         linewidths=0.7,
         zorder=4,
-        label="Top four by adjusted score",
+        label="Labeled actors",
     )
-    offsets = {
-        "Leonardo DiCaprio": (8, -20),
-        "Brad Pitt": (8, 8),
-        "Emma Watson": (8, 5),
-        "Tom Cruise": (8, -17),
-    }
+    ax.set_xlim(0, max(int(row["eligible_movies"]) for row in rows) + 20)
+    ax.set_ylim(0, min(105, max(float(row["success_rate_pct"]) for row in rows) + 13))
+    texts = []
+    shortened = [_short_actor_label(row["name"]) for row in highlighted]
+    shortened_counts = Counter(shortened)
     for row in highlighted:
-        ax.annotate(
-            row["name"],
-            (int(row["eligible_movies"]), float(row["success_rate_pct"])),
-            xytext=offsets.get(row["name"], (8, 8)),
-            textcoords="offset points",
-            fontsize=9,
-            color=INK,
+        candidate = _short_actor_label(row["name"])
+        label = candidate if short_names and shortened_counts[candidate] == 1 else row["name"]
+        texts.append(
+            ax.text(
+                int(row["eligible_movies"]) + 0.7,
+                float(row["success_rate_pct"]) + 0.4,
+                label,
+                fontsize=9,
+                color=INK,
+                zorder=5,
+            )
         )
-    ax.set_xlim(0, max(int(row["eligible_movies"]) for row in rows) + 13)
-    ax.set_ylim(0, min(105, max(float(row["success_rate_pct"]) for row in rows) + 9))
-    ax.set_xlabel("Eligible movies in principal-cast filmography")
-    ax.set_ylabel("Observed success rate (%)")
+    adjust_text(
+        texts,
+        x=[int(row["eligible_movies"]) for row in highlighted],
+        y=[float(row["success_rate_pct"]) for row in highlighted],
+        ax=ax,
+        ensure_inside_axes=True,
+        expand=(1.16, 1.36),
+        force_text=(0.4, 0.6),
+        force_static=(0.25, 0.4),
+        iter_lim=500,
+        arrowprops={"arrowstyle": "-", "color": MUTED, "lw": 0.55},
+    )
     ax.grid(color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
-    ax.set_title("Similar percentages carry different evidence", loc="left", pad=18)
-    ax.text(
-        0,
-        1.015,
-        "Each dot is one of the 100 actors · small samples have less stable percentages",
-        transform=ax.transAxes,
-        color=MUTED,
-        fontsize=10,
-    )
+
+
+def _sample_size_plot(rows: list[dict[str, str]], limit: int, destination: Path) -> None:
+    plt = _setup_figure()
+    if limit <= 10:
+        fig, ax = plt.subplots(figsize=(12.5, 7.6), layout="constrained")
+        _sample_size_panel(ax, rows, rows[:limit])
+        ax.set_xlabel("Eligible movies in principal-cast filmography")
+        ax.set_ylabel("Observed success rate (%)")
+        ax.set_title("Similar percentages carry different evidence", loc="left", pad=38)
+        ax.text(
+            0,
+            1.015,
+            f"All {len(rows)} actors appear as dots; the top {limit} are named",
+            transform=ax.transAxes,
+            color=MUTED,
+            fontsize=10,
+        )
+    else:
+        fig, axes = plt.subplots(3, 1, figsize=(13.5, 15), sharex=True, sharey=True, layout="constrained")
+        boundaries = (0, 9, 17, limit)
+        for ax, start, end in zip(axes, boundaries[:-1], boundaries[1:], strict=True):
+            _sample_size_panel(ax, rows, rows[start:end], short_names=True)
+            ax.set_title(f"Adjusted ranks {start + 1}–{end}", loc="left", pad=10, color=MUTED)
+            ax.set_ylabel("Observed success rate (%)")
+        axes[-1].set_xlabel("Eligible movies in principal-cast filmography")
+        fig.suptitle(
+            f"Top {limit} actors, labeled across three matched views",
+            x=0.08,
+            ha="left",
+            fontsize=18,
+            fontweight="bold",
+        )
+        ax = axes[-1]
     ax.legend(loc="lower right", frameon=False)
     _save_svg(fig, plt, destination)
 
@@ -179,10 +223,11 @@ def _outcome_mix_plot(
     rows: list[dict[str, str]],
     credits: list[dict[str, str]],
     config: dict[str, Any],
+    limit: int,
     destination: Path,
 ) -> None:
     plt = _setup_figure()
-    top = rows[:10][::-1]
+    top = rows[:limit][::-1]
     by_actor: dict[str, list[dict[str, str]]] = defaultdict(list)
     for credit in credits:
         by_actor[credit["nconst"]].append(credit)
@@ -204,7 +249,7 @@ def _outcome_mix_plot(
             ]
         )
 
-    fig, ax = plt.subplots(figsize=(10.5, 6.3), layout="constrained")
+    fig, ax = plt.subplots(figsize=(11, 2.6 + 0.37 * len(top)), layout="constrained")
     positions = list(range(len(labels)))
     left = [0.0] * len(labels)
     for index, (label, color) in enumerate(
@@ -224,7 +269,7 @@ def _outcome_mix_plot(
     ax.xaxis.grid(True, color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
     ax.tick_params(axis="y", length=0)
-    ax.set_title("What makes up each actor’s filmography?", loc="left", pad=18)
+    ax.set_title("What makes up each actor’s filmography?", loc="left", pad=38)
     ax.text(
         0,
         1.015,
@@ -237,15 +282,13 @@ def _outcome_mix_plot(
     _save_svg(fig, plt, destination)
 
 
-def _sensitivity_plot(
+def _sensitivity_data(
     rows: list[dict[str, str]],
     credits: list[dict[str, str]],
     config: dict[str, Any],
-    destination: Path,
-) -> None:
-    plt = _setup_figure()
-    import matplotlib.colors as colors
-
+    limit: int,
+) -> tuple[tuple[float, ...], list[dict[str, str]], list[list[int]], list[int]]:
+    """Count qualifying movies per actor at each rating cutoff."""
     baseline = float(config["rating_threshold"])
     thresholds = tuple(
         threshold for threshold in (baseline - 0.5, baseline, baseline + 0.5, baseline + 1.0)
@@ -255,64 +298,71 @@ def _sensitivity_plot(
     for credit in credits:
         by_actor[credit["nconst"]].append(credit)
 
-    ranks: dict[float, dict[str, int]] = {}
-    for threshold in thresholds:
-        values = []
-        for row in rows:
-            movie_rows = by_actor[row["nconst"]]
-            hits = sum(
+    actors = rows[:limit]
+    totals = [len(by_actor[row["nconst"]]) for row in actors]
+    counts = [
+        [
+            sum(
                 int(credit["cast_rank"]) <= config["major_cast_size"]
                 and float(credit["rating"]) >= threshold
-                for credit in movie_rows
+                for credit in by_actor[row["nconst"]]
             )
-            values.append(
-                (
-                    row["nconst"],
-                    _wilson_lower(hits, len(movie_rows), config["confidence_z"]),
-                    hits,
-                    len(movie_rows),
-                    row["name"],
-                )
-            )
-        values.sort(
-            key=lambda item: (
-                -item[1],
-                -(item[2] / item[3] if item[3] else 0),
-                -item[3],
-                item[4],
-            )
-        )
-        ranks[threshold] = {
-            item[0]: rank for rank, item in enumerate(values, 1)
-        }
-    ranks[baseline] = {
-        row["nconst"]: int(row["confidence_rank"]) for row in rows
-    }
+            for threshold in thresholds
+        ]
+        for row in actors
+    ]
+    return thresholds, actors, counts, totals
 
-    actors = rows[:12]
-    matrix = [[ranks[threshold][row["nconst"]] for threshold in thresholds] for row in actors]
-    cmap = colors.LinearSegmentedColormap.from_list("rank", [TEAL, PALE_TEAL, PALE])
-    fig, ax = plt.subplots(figsize=(8.2, 7.0), layout="constrained")
-    ax.imshow(matrix, cmap=cmap, norm=colors.Normalize(vmin=1, vmax=35), aspect="auto")
+
+def _sensitivity_plot(
+    rows: list[dict[str, str]],
+    credits: list[dict[str, str]],
+    config: dict[str, Any],
+    limit: int,
+    destination: Path,
+) -> None:
+    plt = _setup_figure()
+    import matplotlib.colors as colors
+
+    thresholds, actors, counts, totals = _sensitivity_data(rows, credits, config, limit)
+    rates = [
+        [100 * count / total if total else 0 for count in actor_counts]
+        for actor_counts, total in zip(counts, totals, strict=True)
+    ]
+    cmap = colors.LinearSegmentedColormap.from_list("share", [PALE, PALE_TEAL, TEAL])
+    fig, ax = plt.subplots(figsize=(10, 2.6 + 0.38 * len(actors)), layout="constrained")
+    image = ax.imshow(rates, cmap=cmap, norm=colors.Normalize(vmin=0, vmax=100), aspect="auto")
     ax.set_xticks(range(len(thresholds)), [f"{threshold:.1f}+" for threshold in thresholds])
     ax.set_yticks(range(len(actors)), [row["name"] for row in actors])
     ax.tick_params(length=0)
     ax.set_xlabel("IMDb rating threshold")
-    ax.set_title(f"How much does the {baseline:.1f} cutoff matter?", loc="left", pad=18)
+    ax.set_title("How many major-role films clear each rating cutoff?", loc="left", pad=38)
     ax.text(
         0,
         1.015,
         (
-            f"Rank among all {len(rows)} actors · top {config['major_cast_size']} cast positions "
-            f"and ≥{config['min_votes']:,} votes throughout"
+            f"Top {len(actors)} at the baseline cutoff · each cell is qualifying / eligible films; "
+            "darker color means a higher share"
         ),
         transform=ax.transAxes,
         color=MUTED,
         fontsize=10,
     )
-    for y, series in enumerate(matrix):
-        for x, rank in enumerate(series):
-            ax.text(x, y, str(rank), ha="center", va="center", color="white" if rank < 6 else INK, fontsize=10)
+    for y, actor_counts in enumerate(counts):
+        for x, count in enumerate(actor_counts):
+            ax.text(
+                x,
+                y,
+                f"{count}/{totals[y]}",
+                ha="center",
+                va="center",
+                color="white" if rates[y][x] >= 63 else INK,
+                fontsize=9.5 if limit <= 10 else 8.6,
+            )
+    colorbar = fig.colorbar(image, ax=ax, orientation="horizontal", pad=0.09, fraction=0.035)
+    colorbar.set_label("Share of eligible films that qualify (%)")
+    colorbar.set_ticks([0, 25, 50, 75, 100])
+    colorbar.outline.set_visible(False)
     for spine in ax.spines.values():
         spine.set_visible(False)
     _save_svg(fig, plt, destination)
@@ -329,13 +379,21 @@ def create_plots(results_dir: Path, output_dir: Path) -> list[Path]:
     if not rows or not credits:
         raise ValueError("Analysis CSV files are empty")
     rows.sort(key=lambda row: int(row["confidence_rank"]))
+    if len(rows) < 10:
+        raise ValueError("At least 10 actors are needed to create the top-10 figures")
     output_dir.mkdir(parents=True, exist_ok=True)
-    specs = [
-        ("leaderboard.svg", lambda path: _leaderboard_plot(rows, config, path)),
-        ("sample-size.svg", lambda path: _sample_size_plot(rows, path)),
-        ("outcome-mix.svg", lambda path: _outcome_mix_plot(rows, credits, config, path)),
-        ("rating-sensitivity.svg", lambda path: _sensitivity_plot(rows, credits, config, path)),
-    ]
+    specs = []
+    for limit in (10, 25):
+        if len(rows) < limit:
+            continue
+        specs.extend(
+            [
+                (f"leaderboard-top{limit}.svg", lambda path, n=limit: _leaderboard_plot(rows, config, n, path)),
+                (f"sample-size-top{limit}.svg", lambda path, n=limit: _sample_size_plot(rows, n, path)),
+                (f"outcome-mix-top{limit}.svg", lambda path, n=limit: _outcome_mix_plot(rows, credits, config, n, path)),
+                (f"rating-sensitivity-top{limit}.svg", lambda path, n=limit: _sensitivity_plot(rows, credits, config, n, path)),
+            ]
+        )
     paths = []
     for filename, render in specs:
         path = output_dir / filename
